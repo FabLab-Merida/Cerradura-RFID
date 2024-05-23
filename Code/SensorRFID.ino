@@ -4,15 +4,24 @@
 *
 */
 
-
-
-#include <SPI.h>
+#include <SPI.h> // Incluida en el IDE Arduino
 #include <MFRC522.h> // https://github.com/miguelbalboa/rfid
 
-#define PIN_SDA 10 // PIN SDA
-#define PIN_RST 9 // PIN RESET
-#define PIN_RELE 3
-#define PIN_LED 6
+#define PIN_SDA 21 // PIN SDA
+#define PIN_RST 5 // PIN RESET
+#define PIN_RELE 13
+#define PIN_LED 12
+
+/*
+* Modulo RFID
+* SDA ==> 21 (Puede cambiarse)
+* SCK ==> 18 (Obligatorio en esp32)
+* MOSI ==> 23 (Obligatorio en esp32)
+* MISO ==> 19 (Obligatorio en esp32)
+* GND ==> GND
+* RST ==> 5 (Puede cambiarse)
+* 3.3 ==> 3.3 Voltios (NO PONER EN VIN NI 5V)
+*/
 
 bool inicializada = false;
 byte UID_AUTORIZADA[4];
@@ -21,86 +30,83 @@ byte UID_RECIBIDA[4];
 MFRC522 lector_rfid(PIN_SDA, PIN_RST);
 
 void setup() {
-  Serial.begin(9600);
-  pinMode(PIN_LED, OUTPUT);
-  pinMode(PIN_RELE, OUTPUT);
-  /*
-  * Inicio de los modulos del rfid
-  */
-  SPI.begin();
-  lector_rfid.PCD_Init();   //REGISTRAR TARJETA
-  delay(10);
-  lector_rfid.PCD_DumpVersionToSerial(); // Muestra la informacion del lector RFID si hay serial.
-}
+    Serial.begin(9600);
+    pinMode(PIN_LED, OUTPUT);
+    pinMode(PIN_RELE, OUTPUT);
+    /*
+    * Inicio de los modulos del rfid
+    */
+    SPI.begin();
+    lector_rfid.PCD_Init();
+    delay(10);
+    lector_rfid.PCD_DumpVersionToSerial(); // Muestra la informacion del lector RFID si hay serial.
+
+    }
 
 void loop() {
-  while (inicializada == false) {   // HASTA QUE SE INICIALICE BUCLE
-    digitalWrite(PIN_LED, HIGH);    // LED PARPADEANDO
-    delay(100);
-    if (lector_rfid.PICC_IsNewCardPresent()) {  // HAY TARJETA YA REGISTRADA?
+    while (inicializada == false) {
+        digitalWrite(PIN_LED, HIGH);
+        delay(100);
+        if (lector_rfid.PICC_IsNewCardPresent()) {
+            if (lector_rfid.PICC_ReadCardSerial()) {
+                // ORDENES DE LECTURA 
+                Serial.print("UID Recibida: ");
+                for (int i = 0;i < 4;i++) {
+                    UID_AUTORIZADA[i] = lector_rfid.uid.uidByte[i];
+                    Serial.print(UID_AUTORIZADA[i], HEX);
+                    Serial.print(" ");
+                    }
+                Serial.println(" ");
+                digitalWrite(PIN_LED, HIGH);
+                delay(3000);
+                inicializada = true;
+                }
+            else {
+                Serial.println("ERR. TARJETA RFID NO VALIDA");
+                }
 
-      if (lector_rfid.PICC_ReadCardSerial()) {  // COMPRONAR QUE ES CORRECTA
-        // ORDENES DE LECTURA 
-        Serial.print("UID Recibida: ");
-        for (int i = 0;i < 4;i++) {
-          UID_AUTORIZADA[i] = lector_rfid.uid.uidByte[i];
-          Serial.print(UID_AUTORIZADA[i], HEX);
-          Serial.print(" ");
-        }
-        Serial.println(" ");
-        digitalWrite(PIN_LED, HIGH);    // LED SE MANTIENE 3 SEGUNDOS ENCENDIDA
-        delay(3000);
-        inicializada = true;            // YA HAY TARJETA INICIALIZADA
-      }
-
-      else {
-        Serial.println("ERR. TARJETA RFID NO VALIDA");    // NO CORRECTA Y SIGUE PITANDO Y COMPROBANDO
-      }
-    }
-    digitalWrite(PIN_LED, LOW);   // LED SE APAGA
-    delay(100);
-  }
-
-  if (lector_rfid.PICC_IsNewCardPresent()) {    //SI YA HA SIDO INICIALIZADA REALMENTE
-
-      if (lector_rfid.PICC_ReadCardSerial()) {    // LEE LA TARJETA CON LA QUE SE ESTÉ INTENTANDO ABRIR LA PUERTA
-        // ORDENES DE LECTURA 
-        Serial.print("UID Recibida: ");
-        for (int i = 0;i < 4;i++) {
-          UID_RECIBIDA[i] = lector_rfid.uid.uidByte[i];
-          Serial.print(UID_RECIBIDA[i], HEX);
-          Serial.print(" ");
-        }
-        Serial.println(" ");
-
-        // Verifica si esa UID es la misma que la autorizada.
-        if (UID_RECIBIDA[0] == UID_AUTORIZADA[0] &&     // SI LA RECIBIDA == AUTORIZADA 
-          UID_RECIBIDA[1] == UID_AUTORIZADA[1] &&
-          UID_RECIBIDA[2] == UID_AUTORIZADA[2] &&
-          UID_RECIBIDA[3] == UID_AUTORIZADA[3]) {
-          Serial.println("AUTORIZADO, ABRIENDO");
-          digitalWrite(PIN_RELE, HIGH);                 // SE ACTIVA EL RELE
-          digitalWrite(PIN_LED, HIGH);                  // LED SE MANTIENE ENCENDIDA 1'5 SEG
-          delay(1500);
-          digitalWrite(PIN_RELE, LOW);                  // SE APAGA EL RELE
-          digitalWrite(PIN_LED, LOW);                   // LED SE APAGA
+            }
+        digitalWrite(PIN_LED, LOW);
+        delay(100);
         }
 
+    if (lector_rfid.PICC_IsNewCardPresent()) {
+        if (lector_rfid.PICC_ReadCardSerial()) {
+            // ORDENES DE LECTURA 
+            Serial.print("UID Recibida: ");
+            for (int i = 0;i < 4;i++) {
+                UID_RECIBIDA[i] = lector_rfid.uid.uidByte[i];
+                Serial.print(UID_RECIBIDA[i], HEX);
+                Serial.print(" ");
+                }
+            Serial.println(" ");
+            // Verifica si esa UID es la misma que la autorizada.
+            if (UID_RECIBIDA[0] == UID_AUTORIZADA[0] &&
+                UID_RECIBIDA[1] == UID_AUTORIZADA[1] &&
+                UID_RECIBIDA[2] == UID_AUTORIZADA[2] &&
+                UID_RECIBIDA[3] == UID_AUTORIZADA[3]) {
+                Serial.println("AUTORIZADO, ABRIENDO");
+                digitalWrite(PIN_RELE, HIGH);
+                digitalWrite(PIN_LED, HIGH);
+                delay(1500);
+                digitalWrite(PIN_RELE, LOW);
+                digitalWrite(PIN_LED, LOW);
+                }
+            else {
+                Serial.println("NO AUTORIZADO");
+                for (int i = 0;i < 3;i++) {
+                    digitalWrite(PIN_LED, HIGH);
+                    delay(50);
+                    digitalWrite(PIN_LED, LOW);
+                    delay(50);
+                    }
+                }
+            lector_rfid.PICC_HaltA(); //Pone el lector en modo SLEEP hasta que se acerque otra tajeta
+
+            }
         else {
-          Serial.println("NO AUTORIZADO");      // RECIBIDA != AUTORIZADA
-          for (int i = 0;i < 3;i++) {
-            digitalWrite(PIN_LED, HIGH);        // 2 PITIDOS DE LED RAPIDOS
-            delay(50);
-            digitalWrite(PIN_LED, LOW);
-            delay(50);
-          }
+            Serial.println("ERR. TARJETA RFID NO VALIDA");
+            }
+
         }
-        lector_rfid.PICC_HaltA(); //Pone el lector en modo SLEEP hasta que se acerque otra tajeta
-
-      }
-      else {
-          Serial.println("ERR. TARJETA RFID NO VALIDA");    // LA TARJETA RECIBIDA NO ES VÁLIDA
-      }
-
-  }
-}
+    }
