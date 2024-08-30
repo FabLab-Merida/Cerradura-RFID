@@ -86,10 +86,10 @@ void loop() {
                 UID_RECIBIDA[2] == UID_AUTORIZADA[2] &&
                 UID_RECIBIDA[3] == UID_AUTORIZADA[3]) {
                 Serial.println("AUTORIZADO, ABRIENDO");
-                digitalWrite(PIN_RELE, HIGH);
+                int estado_anterior= digitalRead(PIN_RELE);
+                digitalWrite(PIN_RELE, !estado_anterior);
                 digitalWrite(PIN_LED, HIGH);
                 delay(1500);
-                digitalWrite(PIN_RELE, LOW);
                 digitalWrite(PIN_LED, LOW);
                 }
             else {
