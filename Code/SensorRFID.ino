@@ -1,112 +1,90 @@
-/*
-*
-* RDID - ESP32 PUERTA
-*
-*/
+#include <SPI.h>
+#include <MFRC522.h>
 
-#include <SPI.h> // Incluida en el IDE Arduino
-#include <MFRC522.h> // https://github.com/miguelbalboa/rfid
+/*************/
+/* Constantes */
+#define SERIAL_BITRATE 115200
 
-#define PIN_SDA 21 // PIN SDA
-#define PIN_RST 5 // PIN RESET
-#define PIN_RELE 13
-#define PIN_LED 12
+/* RFID */
+#define RFID_PIN_RESET 5
+#define RFID_PIN_SPI 21 // Cambia este pin según tu configuración de hardware
 
-/*
-* Modulo RFID
-* SDA ==> 21 (Puede cambiarse)
-* SCK ==> 18 (Obligatorio en esp32)
-* MOSI ==> 23 (Obligatorio en esp32)
-* MISO ==> 19 (Obligatorio en esp32)
-* GND ==> GND
-* RST ==> 5 (Puede cambiarse)
-* 3.3 ==> 3.3 Voltios (NO PONER EN VIN NI 5V)
-*/
+/* LEDS */
+#define LED_PIN_LISTO 14
+#define LED_PIN_DENEGADO 12
+#define LED_PIN_PERMITIDO 13
 
-bool inicializada = false;
-byte UID_AUTORIZADA[4];
-byte UID_RECIBIDA[4];
+// Código autorizado (cambiar por el UID válido)
+const String codigo_tarjeta_autorizada = "123-456-789-012";
 
-MFRC522 lector_rfid(PIN_SDA, PIN_RST);
+/* Función para mostrar el UID */
+void mostrarByteArray(byte *buffer, byte bufferSize) {
+    for (byte i = 0; i < bufferSize; i++) {
+        Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+        Serial.print(buffer[i], HEX);
+    }
+    Serial.println("");
+}
+
+MFRC522 mfrc522(RFID_PIN_SPI, RFID_PIN_RESET);
+MFRC522::MIFARE_Key clave = {
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
+};
 
 void setup() {
-    Serial.begin(9600);
-    pinMode(PIN_LED, OUTPUT);
-    pinMode(PIN_RELE, OUTPUT);
-    /*
-    * Inicio de los modulos del rfid
-    */
-    SPI.begin();
-    lector_rfid.PCD_Init();
-    delay(10);
-    lector_rfid.PCD_DumpVersionToSerial(); // Muestra la informacion del lector RFID si hay serial.
+    Serial.begin(SERIAL_BITRATE);
+    SPI.begin(); // Iniciar SPI
+    mfrc522.PCD_Init(); // Inicializar lector RFID
 
-    }
+    delay(10);
+
+    pinMode(LED_PIN_LISTO, OUTPUT);
+    pinMode(LED_PIN_DENEGADO, OUTPUT);
+    pinMode(LED_PIN_PERMITIDO, OUTPUT);
+
+    Serial.println("Setup Finalizado");
+    digitalWrite(LED_PIN_LISTO, HIGH);
+}
 
 void loop() {
-    while (inicializada == false) {
-        digitalWrite(PIN_LED, HIGH);
-        delay(100);
-        if (lector_rfid.PICC_IsNewCardPresent()) {
-            if (lector_rfid.PICC_ReadCardSerial()) {
-                // ORDENES DE LECTURA 
-                Serial.print("UID Recibida: ");
-                for (int i = 0;i < 4;i++) {
-                    UID_AUTORIZADA[i] = lector_rfid.uid.uidByte[i];
-                    Serial.print(UID_AUTORIZADA[i], HEX);
-                    Serial.print(" ");
-                    }
-                Serial.println(" ");
-                digitalWrite(PIN_LED, HIGH);
-                delay(3000);
-                inicializada = true;
-                }
-            else {
-                Serial.println("ERR. TARJETA RFID NO VALIDA");
-                }
-
-            }
-        digitalWrite(PIN_LED, LOW);
-        delay(100);
-        }
-
-    if (lector_rfid.PICC_IsNewCardPresent()) {
-        if (lector_rfid.PICC_ReadCardSerial()) {
-            // ORDENES DE LECTURA 
-            Serial.print("UID Recibida: ");
-            for (int i = 0;i < 4;i++) {
-                UID_RECIBIDA[i] = lector_rfid.uid.uidByte[i];
-                Serial.print(UID_RECIBIDA[i], HEX);
-                Serial.print(" ");
-                }
-            Serial.println(" ");
-            // Verifica si esa UID es la misma que la autorizada.
-            if (UID_RECIBIDA[0] == UID_AUTORIZADA[0] &&
-                UID_RECIBIDA[1] == UID_AUTORIZADA[1] &&
-                UID_RECIBIDA[2] == UID_AUTORIZADA[2] &&
-                UID_RECIBIDA[3] == UID_AUTORIZADA[3]) {
-                Serial.println("AUTORIZADO, ABRIENDO");
-                int estado_anterior= digitalRead(PIN_RELE);
-                digitalWrite(PIN_RELE, !estado_anterior);
-                digitalWrite(PIN_LED, HIGH);
-                delay(1500);
-                digitalWrite(PIN_LED, LOW);
-                }
-            else {
-                Serial.println("NO AUTORIZADO");
-                for (int i = 0;i < 3;i++) {
-                    digitalWrite(PIN_LED, HIGH);
-                    delay(50);
-                    digitalWrite(PIN_LED, LOW);
-                    delay(50);
-                    }
-                }
-            lector_rfid.PICC_HaltA(); //Pone el lector en modo SLEEP hasta que se acerque otra tajeta
-
-            }
-        else {
-            Serial.println("ERR. TARJETA RFID NO VALIDA");
-            }
-
-        }
+    if (!mfrc522.PICC_IsNewCardPresent()) {
+        Serial.println("Esperando tarjeta...");
+        delay(500);
+        return;
     }
+
+    if (!mfrc522.PICC_ReadCardSerial()) {
+        Serial.println("Error al leer la tarjeta");
+        delay(500);
+        return;
+    }
+
+    digitalWrite(LED_PIN_LISTO, LOW);
+
+    mostrarByteArray(mfrc522.uid.uidByte, mfrc522.uid.size);
+
+    String strUID1 = String(mfrc522.uid.uidByte[0]) + "-" +
+                     String(mfrc522.uid.uidByte[1]) + "-" +
+                     String(mfrc522.uid.uidByte[2]) + "-" +
+                     String(mfrc522.uid.uidByte[3]);
+
+    Serial.println("UID detectado: " + strUID1);
+
+    if (autenticar(strUID1)) {
+        digitalWrite(LED_PIN_PERMITIDO, HIGH);
+        Serial.println("Acceso permitido");
+    } else {
+        digitalWrite(LED_PIN_DENEGADO, HIGH);
+        Serial.println("Acceso denegado");
+    }
+
+    delay(1500);
+
+    digitalWrite(LED_PIN_PERMITIDO, LOW);
+    digitalWrite(LED_PIN_DENEGADO, LOW);
+    digitalWrite(LED_PIN_LISTO, HIGH);
+}
+
+bool autenticar(String codigo_tarjeta) {
+    return codigo_tarjeta == codigo_tarjeta_autorizada;
+}
